@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Revelation Book Short Viewer</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PDF overview</p>
+        <h1>REVELATION BOOK SHORT</h1>
+      </div>
+      <div class="controls" aria-label="Viewer controls">
+        <label class="range-control">
+          <span>Page size</span>
+          <input id="pageSize" type="range" min="150" max="380" value="230">
+        </label>
+        <a class="pdf-link" href="REVELATION_BOOK_SHORT.pdf">Open PDF</a>
+      </div>
+    </header>
+
+    <nav id="chapterNav" class="chapter-nav" aria-label="Chapter shortcuts"></nav>
+
+    <main>
+      <section id="pageGrid" class="page-grid" aria-label="All PDF pages"></section>
+    </main>
+
+    <button id="scrollTop" class="scroll-top" type="button" aria-label="Scroll to top">↑</button>
+
+    <div id="zoomOverlay" class="zoom-overlay" aria-hidden="true">
+      <div class="zoom-toolbar" aria-label="Zoom controls">
+        <button id="zoomOut" type="button" aria-label="Zoom out">-</button>
+        <span id="zoomLabel">100%</span>
+        <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+        <button id="fitPage" type="button">Fit</button>
+        <button id="closeZoom" type="button" aria-label="Close">X</button>
+      </div>
+      <div id="zoomPane" class="zoom-pane">
+        <img id="zoomImage" alt="">
+      </div>
+    </div>
+
+    <script src="viewer.js"></script>
+  </body>
+</html>
