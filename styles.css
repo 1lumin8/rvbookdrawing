@@ -186,6 +186,25 @@ main {
   white-space: nowrap;
 }
 
+.section-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  color: var(--accent-dark);
+  font-size: 0.86rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.section-label::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: rgba(101, 112, 106, 0.2);
+}
+
 .page-card {
   margin: 0;
   min-width: 0;

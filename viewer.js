@@ -1,6 +1,18 @@
 const PAGE_COUNT = 105;
 const FIRST_PAGE = 2;
 const PAGE_PATH = "assets/pages/page-";
+const NOTES_PAGE_COUNT = 53;
+const NOTES_PAGE_PATH = "assets/notes-pages/note-";
+const DETAILS = [
+  {
+    label: "Physical Fulfillment Figures",
+    page: 2,
+    src: notesPageFile(2),
+    kind: "detail",
+  },
+  { label: "Timeline 1", page: 51, src: notesPageFile(51), kind: "notes" },
+  { label: "Timeline 2", page: 52, src: notesPageFile(52), kind: "notes" },
+];
 const grid = document.querySelector("#pageGrid");
 const chapterNav = document.querySelector("#chapterNav");
 const pageSize = document.querySelector("#pageSize");
@@ -23,36 +35,36 @@ let movedDuringDrag = false;
 let dragStart = { x: 0, y: 0, left: 0, top: 0 };
 
 const CHAPTERS = [
-  { label: "Rev 1", page: 2 },
-  { label: "Rev 2", page: 5 },
-  { label: "Rev 3", page: 10 },
-  { label: "Rev 4", page: 14 },
-  { label: "Rev 5", page: 17 },
-  { label: "Rev 6", page: 21 },
-  { label: "Rev 7", page: 25 },
-  { label: "Rev 8", page: 28 },
-  { label: "Rev 9", page: 32 },
-  { label: "Rev 10", page: 36 },
-  { label: "Rev 11", page: 39 },
-  { label: "Rev 12", page: 44 },
-  { label: "Rev 13", page: 50 },
-  { label: "Rev 14", page: 56 },
-  { label: "Rev 15", page: 61 },
-  { label: "Rev 16", page: 64 },
-  { label: "Rev 17", page: 70 },
-  { label: "Rev 18", page: 77 },
-  { label: "Rev 19", page: 84 },
-  { label: "Rev 20", page: 91 },
-  { label: "Rev 21", page: 95 },
-  { label: "Rev 22", page: 101 },
+  { label: "Rev 1", page: 2, notesPage: 3 },
+  { label: "Rev 2", page: 5, notesPage: 7 },
+  { label: "Rev 3", page: 10, notesPage: 11 },
+  { label: "Rev 4", page: 14, notesPage: 15 },
+  { label: "Rev 5", page: 17, notesPage: 16 },
+  { label: "Rev 6", page: 21, notesPage: 17 },
+  { label: "Rev 7", page: 25, notesPage: 19 },
+  { label: "Rev 8", page: 28, notesPage: 21 },
+  { label: "Rev 9", page: 32, notesPage: 23 },
+  { label: "Rev 10", page: 36, notesPage: 25 },
+  { label: "Rev 11", page: 39, notesPage: 27 },
+  { label: "Rev 12", page: 44, notesPage: 29 },
+  { label: "Rev 13", page: 50, notesPage: 31 },
+  { label: "Rev 14", page: 56, notesPage: 33 },
+  { label: "Rev 15", page: 61, notesPage: 35 },
+  { label: "Rev 16", page: 64, notesPage: 37 },
+  { label: "Rev 17", page: 70, notesPage: 39 },
+  { label: "Rev 18", page: 77, notesPage: 41 },
+  { label: "Rev 19", page: 84, notesPage: 43 },
+  { label: "Rev 20", page: 91, notesPage: 45 },
+  { label: "Rev 21", page: 95, notesPage: 47 },
+  { label: "Rev 22", page: 101, notesPage: 49, notesEndPage: 50 },
 ];
 
 function pageFile(pageNumber) {
   return `${PAGE_PATH}${String(pageNumber).padStart(3, "0")}.jpg`;
 }
 
-function getChapterForPage(page) {
-  return CHAPTERS.find((chapter) => chapter.page === page);
+function notesPageFile(pageNumber) {
+  return `${NOTES_PAGE_PATH}${String(pageNumber).padStart(2, "0")}.jpg`;
 }
 
 function getChapterEndPage(chapterIndex) {
@@ -60,8 +72,21 @@ function getChapterEndPage(chapterIndex) {
   return nextChapter ? nextChapter.page - 1 : PAGE_COUNT;
 }
 
+function getNotesEndPage(chapterIndex) {
+  if (CHAPTERS[chapterIndex].notesEndPage) {
+    return CHAPTERS[chapterIndex].notesEndPage;
+  }
+  const nextChapter = CHAPTERS[chapterIndex + 1];
+  return nextChapter ? nextChapter.notesPage - 1 : NOTES_PAGE_COUNT;
+}
+
 function buildChapterNav() {
   const fragment = document.createDocumentFragment();
+  const detailsLink = document.createElement("a");
+
+  detailsLink.href = "#details";
+  detailsLink.textContent = "Details";
+  fragment.append(detailsLink);
 
   CHAPTERS.forEach((chapter) => {
     const link = document.createElement("a");
@@ -78,48 +103,95 @@ function createChapterDivider(chapter, index) {
   const title = document.createElement("h2");
   const range = document.createElement("span");
   const endPage = getChapterEndPage(index);
+  const notesEndPage = getNotesEndPage(index);
 
   divider.className = "chapter-divider";
   divider.id = `chapter-${chapter.page}`;
   title.textContent = `Revelation ${chapter.label.replace("Rev ", "")}`;
-  range.textContent = chapter.page === endPage ? `Page ${chapter.page}` : `Pages ${chapter.page}-${endPage}`;
+  range.textContent = `Drawings ${chapter.page}-${endPage} · Notes ${chapter.notesPage}-${notesEndPage}`;
 
   divider.append(title, range);
   return divider;
 }
 
+function createDetailsDivider() {
+  const divider = document.createElement("div");
+  const title = document.createElement("h2");
+  const range = document.createElement("span");
+
+  divider.className = "chapter-divider";
+  divider.id = "details";
+  title.textContent = "Details";
+  range.textContent = "Figures · Timelines";
+
+  divider.append(title, range);
+  return divider;
+}
+
+function createSectionLabel(text) {
+  const label = document.createElement("div");
+  label.className = "section-label";
+  label.textContent = text;
+  return label;
+}
+
+function createPageCard({ page, src, kind }) {
+  const figure = document.createElement("figure");
+  const button = document.createElement("button");
+  const image = document.createElement("img");
+  const caption = document.createElement("figcaption");
+  const label = kind === "notes" ? `Notes page ${page}` : kind === "detail" ? page : `Page ${page}`;
+
+  figure.className = "page-card";
+  button.className = "page-button";
+  button.type = "button";
+  button.dataset.page = page;
+  button.dataset.src = src;
+  button.dataset.label = label;
+  button.dataset.kind = kind;
+  button.setAttribute("aria-label", `Open ${label}`);
+
+  image.src = src;
+  image.alt = label;
+  image.loading = page <= 8 ? "eager" : "lazy";
+  image.decoding = "async";
+
+  caption.className = "caption";
+  caption.textContent = label;
+
+  button.append(image);
+  figure.append(button, caption);
+  return figure;
+}
+
 function buildGrid() {
   const fragment = document.createDocumentFragment();
 
-  for (let page = FIRST_PAGE; page <= PAGE_COUNT; page += 1) {
-    const chapterIndex = CHAPTERS.findIndex((chapter) => chapter.page === page);
-    if (chapterIndex >= 0) {
-      fragment.append(createChapterDivider(CHAPTERS[chapterIndex], chapterIndex));
+  fragment.append(createDetailsDivider());
+  fragment.append(createSectionLabel("Reference details"));
+  DETAILS.forEach((detail) => {
+    fragment.append(createPageCard(detail));
+  });
+
+  CHAPTERS.forEach((chapter, chapterIndex) => {
+    const drawingEnd = getChapterEndPage(chapterIndex);
+    const notesEnd = getNotesEndPage(chapterIndex);
+
+    fragment.append(createChapterDivider(chapter, chapterIndex));
+    fragment.append(createSectionLabel("Drawings"));
+
+    for (let page = chapter.page; page <= drawingEnd; page += 1) {
+      if (page >= FIRST_PAGE) {
+        fragment.append(createPageCard({ page, src: pageFile(page), kind: "drawing" }));
+      }
     }
 
-    const figure = document.createElement("figure");
-    const button = document.createElement("button");
-    const image = document.createElement("img");
-    const caption = document.createElement("figcaption");
+    fragment.append(createSectionLabel("Explanation notes"));
 
-    figure.className = "page-card";
-    button.className = "page-button";
-    button.type = "button";
-    button.dataset.page = page;
-    button.setAttribute("aria-label", `Open page ${page}`);
-
-    image.src = pageFile(page);
-    image.alt = `Page ${page}`;
-    image.loading = page <= 8 ? "eager" : "lazy";
-    image.decoding = "async";
-
-    caption.className = "caption";
-    caption.textContent = `Page ${page}`;
-
-    button.append(image);
-    figure.append(button, caption);
-    fragment.append(figure);
-  }
+    for (let page = chapter.notesPage; page <= notesEnd; page += 1) {
+      fragment.append(createPageCard({ page, src: notesPageFile(page), kind: "notes" }));
+    }
+  });
 
   grid.append(fragment);
 }
@@ -170,17 +242,20 @@ function centerOnFocus() {
   });
 }
 
-function openZoom(page, event) {
-  const source = event.currentTarget.querySelector("img");
+function openZoom(button, event) {
+  const page = button.dataset.page;
+  const source = button.querySelector("img");
   const rect = source.getBoundingClientRect();
+  const src = button.dataset.src;
+  const label = source.alt || button.dataset.label || `Page ${page}`;
 
   clickFocus = {
     x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
     y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
   };
   activePage = page;
-  zoomImage.src = pageFile(page);
-  zoomImage.alt = `Page ${page}`;
+  zoomImage.src = src;
+  zoomImage.alt = label;
 
   document.body.classList.add("zooming");
   overlay.classList.add("is-open");
@@ -208,7 +283,7 @@ function closeOverlay() {
 grid.addEventListener("click", (event) => {
   const button = event.target.closest(".page-button");
   if (!button) return;
-  openZoom(Number(button.dataset.page), event);
+  openZoom(button, event);
 });
 
 pageSize.addEventListener("input", syncPageSize);
