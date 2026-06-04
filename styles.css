@@ -191,7 +191,7 @@ main {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 6px;
+  margin: 18px 0 -2px;
   color: var(--accent-dark);
   font-size: 0.86rem;
   font-weight: 850;
