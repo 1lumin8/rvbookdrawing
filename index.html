@@ -24,6 +24,15 @@
 
     <nav id="chapterNav" class="chapter-nav" aria-label="Chapter shortcuts"></nav>
 
+    <section class="search-row" aria-label="Search viewer">
+      <label class="search-box">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Search chapters, pages, or notes text">
+      </label>
+      <div id="searchStatus" class="search-status" aria-live="polite">Search notes and page labels</div>
+    </section>
+    <section id="searchResults" class="search-results" aria-label="Search results"></section>
+
     <main>
       <section id="pageGrid" class="page-grid" aria-label="All PDF pages"></section>
     </main>
@@ -43,6 +52,7 @@
       </div>
     </div>
 
-    <script src="viewer.js?v=4"></script>
+    <script src="search-index.js?v=1"></script>
+    <script src="viewer.js?v=10"></script>
   </body>
 </html>

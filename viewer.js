@@ -16,6 +16,9 @@ const DETAILS = [
 const grid = document.querySelector("#pageGrid");
 const chapterNav = document.querySelector("#chapterNav");
 const pageSize = document.querySelector("#pageSize");
+const searchInput = document.querySelector("#searchInput");
+const searchStatus = document.querySelector("#searchStatus");
+const searchResults = document.querySelector("#searchResults");
 const scrollTop = document.querySelector("#scrollTop");
 const overlay = document.querySelector("#zoomOverlay");
 const pane = document.querySelector("#zoomPane");
@@ -33,6 +36,9 @@ let fitWidth = 900;
 let dragging = false;
 let movedDuringDrag = false;
 let dragStart = { x: 0, y: 0, left: 0, top: 0 };
+let searchableCards = [];
+let chapterGroups = [];
+let searchTimer = null;
 
 const CHAPTERS = [
   { label: "Rev 1", page: 2, notesPage: 3 },
@@ -128,14 +134,89 @@ function createDetailsDivider() {
   return divider;
 }
 
-function createSectionLabel(text) {
+function createSectionLabel(text, groupId) {
   const label = document.createElement("div");
   label.className = "section-label";
+  label.dataset.groupId = groupId;
   label.textContent = text;
   return label;
 }
 
-function createPageCard({ page, src, kind }) {
+function getSearchText({ page, kind, label, chapterLabel = "", section = "" }) {
+  const parts = [label, kind, chapterLabel, section];
+  if (kind === "drawing") {
+    parts.push(`drawing page ${page}`, `picture page ${page}`);
+  }
+  if (kind === "notes" || kind === "detail") {
+    const indexItem = (window.SEARCH_INDEX || []).find((item) => item.kind === "notes" && String(item.page) === String(page));
+    if (indexItem) parts.push(indexItem.title, indexItem.text);
+  }
+  return parts.join(" ").toLowerCase();
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[char]);
+}
+
+function getSearchScore(text, query, terms) {
+  const lower = text.toLowerCase();
+  let score = 0;
+
+  if (lower.includes(query)) score += 1000;
+  terms.forEach((term) => {
+    const matches = lower.match(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
+    score += matches ? matches.length : 0;
+  });
+
+  return score;
+}
+
+function getSnippet(text, query, terms) {
+  if (!text) return "";
+  const lower = text.toLowerCase();
+  const phraseIndex = lower.indexOf(query);
+  const firstTermIndex = terms.reduce((best, term) => {
+    const index = lower.indexOf(term);
+    if (index < 0) return best;
+    return best < 0 ? index : Math.min(best, index);
+  }, -1);
+  const firstIndex = phraseIndex >= 0 ? phraseIndex : firstTermIndex;
+  const start = Math.max(0, firstIndex - 80);
+  const end = Math.min(text.length, (firstIndex < 0 ? 0 : firstIndex) + 170);
+  let snippet = text.slice(start, end).trim();
+  if (start > 0) snippet = `...${snippet}`;
+  if (end < text.length) snippet = `${snippet}...`;
+
+  if (query.includes(" ")) {
+    const escapedPhrase = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    snippet = snippet.replace(new RegExp(`(${escapedPhrase})`, "ig"), "<<<mark>>>$1<<<endmark>>>");
+  }
+
+  terms.forEach((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    snippet = snippet.replace(new RegExp(`(?![^<]*<<<endmark>>>)(\\b${escaped}\\b)`, "ig"), "<<<mark>>>$1<<<endmark>>>");
+  });
+
+  return escapeHtml(snippet)
+    .replaceAll("&lt;&lt;&lt;mark&gt;&gt;&gt;", "<mark>")
+    .replaceAll("&lt;&lt;&lt;endmark&gt;&gt;&gt;", "</mark>");
+}
+
+function getCardSnippet(card, query, terms) {
+  const page = card.querySelector(".page-button")?.dataset.page;
+  const kind = card.querySelector(".page-button")?.dataset.kind;
+  if (kind !== "notes" && kind !== "detail") return "";
+  const indexItem = (window.SEARCH_INDEX || []).find((item) => String(item.page) === String(page));
+  return indexItem ? getSnippet(indexItem.text, query, terms) : "";
+}
+
+function createPageCard({ page, src, kind, chapterLabel = "", groupId = "", section = "" }) {
   const figure = document.createElement("figure");
   const button = document.createElement("button");
   const image = document.createElement("img");
@@ -143,6 +224,9 @@ function createPageCard({ page, src, kind }) {
   const label = kind === "notes" ? `Notes page ${page}` : kind === "detail" ? page : `Page ${page}`;
 
   figure.className = "page-card";
+  figure.dataset.groupId = groupId;
+  figure.dataset.section = section;
+  figure.dataset.searchText = getSearchText({ page, kind, label, chapterLabel, section });
   button.className = "page-button";
   button.type = "button";
   button.dataset.page = page;
@@ -166,34 +250,64 @@ function createPageCard({ page, src, kind }) {
 
 function buildGrid() {
   const fragment = document.createDocumentFragment();
+  const detailsGroup = {
+    id: "details",
+    divider: createDetailsDivider(),
+    labels: [],
+    cards: [],
+    searchText: "details reference physical fulfillment figures timelines notes page 2 notes page 51 notes page 52",
+  };
 
-  fragment.append(createDetailsDivider());
-  fragment.append(createSectionLabel("Reference details"));
+  fragment.append(detailsGroup.divider);
+  const detailsLabel = createSectionLabel("Reference details", detailsGroup.id);
+  detailsGroup.labels.push(detailsLabel);
+  fragment.append(detailsLabel);
   DETAILS.forEach((detail) => {
-    fragment.append(createPageCard(detail));
+    const card = createPageCard({ ...detail, groupId: detailsGroup.id, chapterLabel: "Details", section: "Reference details" });
+    detailsGroup.cards.push(card);
+    fragment.append(card);
   });
+  chapterGroups.push(detailsGroup);
 
   CHAPTERS.forEach((chapter, chapterIndex) => {
     const drawingEnd = getChapterEndPage(chapterIndex);
     const notesEnd = getNotesEndPage(chapterIndex);
+    const group = {
+      id: `chapter-${chapter.page}`,
+      divider: createChapterDivider(chapter, chapterIndex),
+      labels: [],
+      cards: [],
+      searchText: `${chapter.label} revelation ${chapter.label.replace("Rev ", "")} drawings ${chapter.page}-${drawingEnd} notes ${chapter.notesPage}-${notesEnd}`.toLowerCase(),
+    };
 
-    fragment.append(createChapterDivider(chapter, chapterIndex));
-    fragment.append(createSectionLabel("Drawings"));
+    fragment.append(group.divider);
+    const drawingLabel = createSectionLabel("Drawings", group.id);
+    group.labels.push(drawingLabel);
+    fragment.append(drawingLabel);
 
     for (let page = chapter.page; page <= drawingEnd; page += 1) {
       if (page >= FIRST_PAGE) {
-        fragment.append(createPageCard({ page, src: pageFile(page), kind: "drawing" }));
+        const card = createPageCard({ page, src: pageFile(page), kind: "drawing", chapterLabel: chapter.label, groupId: group.id, section: "Drawings" });
+        group.cards.push(card);
+        fragment.append(card);
       }
     }
 
-    fragment.append(createSectionLabel("Explanation notes"));
+    const notesLabel = createSectionLabel("Explanation notes", group.id);
+    group.labels.push(notesLabel);
+    fragment.append(notesLabel);
 
     for (let page = chapter.notesPage; page <= notesEnd; page += 1) {
-      fragment.append(createPageCard({ page, src: notesPageFile(page), kind: "notes" }));
+      const card = createPageCard({ page, src: notesPageFile(page), kind: "notes", chapterLabel: chapter.label, groupId: group.id, section: "Explanation notes" });
+      group.cards.push(card);
+      fragment.append(card);
     }
+
+    chapterGroups.push(group);
   });
 
   grid.append(fragment);
+  searchableCards = Array.from(grid.querySelectorAll(".page-card"));
 }
 
 function syncPageSize() {
@@ -214,12 +328,29 @@ function getFitWidth() {
   return Math.max(260, Math.min(widthFit, heightFit, 1000));
 }
 
-function setZoom(nextZoom, keepCenter = true) {
+function getZoomAnchor(event) {
+  if (!event) {
+    return {
+      x: pane.scrollLeft + pane.clientWidth / 2 - zoomImage.offsetLeft,
+      y: pane.scrollTop + pane.clientHeight / 2 - zoomImage.offsetTop,
+    };
+  }
+
+  const paneRect = pane.getBoundingClientRect();
+  return {
+    x: pane.scrollLeft + event.clientX - paneRect.left - zoomImage.offsetLeft,
+    y: pane.scrollTop + event.clientY - paneRect.top - zoomImage.offsetTop,
+  };
+}
+
+function setZoom(nextZoom, keepCenter = true, anchorEvent = null) {
   const oldWidth = zoomImage.getBoundingClientRect().width || fitWidth;
-  const centerX = pane.scrollLeft + pane.clientWidth / 2;
-  const centerY = pane.scrollTop + pane.clientHeight / 2;
-  const ratioX = centerX / oldWidth;
-  const ratioY = centerY / (oldWidth * 11 / 8.5);
+  const oldHeight = zoomImage.getBoundingClientRect().height || oldWidth * 11 / 8.5;
+  const anchor = getZoomAnchor(anchorEvent);
+  const ratioX = clamp(anchor.x / oldWidth, 0, 1);
+  const ratioY = clamp(anchor.y / oldHeight, 0, 1);
+  const targetClientX = anchorEvent ? anchorEvent.clientX - pane.getBoundingClientRect().left : pane.clientWidth / 2;
+  const targetClientY = anchorEvent ? anchorEvent.clientY - pane.getBoundingClientRect().top : pane.clientHeight / 2;
 
   zoom = clamp(nextZoom, 0.55, 4);
   zoomImage.style.width = `${Math.round(fitWidth * zoom)}px`;
@@ -228,8 +359,9 @@ function setZoom(nextZoom, keepCenter = true) {
   if (keepCenter) {
     requestAnimationFrame(() => {
       const newWidth = zoomImage.getBoundingClientRect().width;
-      pane.scrollLeft = ratioX * newWidth - pane.clientWidth / 2;
-      pane.scrollTop = ratioY * (newWidth * 11 / 8.5) - pane.clientHeight / 2;
+      const newHeight = zoomImage.getBoundingClientRect().height;
+      pane.scrollLeft = zoomImage.offsetLeft + ratioX * newWidth - targetClientX;
+      pane.scrollTop = zoomImage.offsetTop + ratioY * newHeight - targetClientY;
     });
   }
 }
@@ -237,8 +369,8 @@ function setZoom(nextZoom, keepCenter = true) {
 function centerOnFocus() {
   requestAnimationFrame(() => {
     const rect = zoomImage.getBoundingClientRect();
-    pane.scrollLeft = clickFocus.x * rect.width - pane.clientWidth / 2;
-    pane.scrollTop = clickFocus.y * rect.height - pane.clientHeight / 2;
+    pane.scrollLeft = zoomImage.offsetLeft + clickFocus.x * rect.width - pane.clientWidth / 2;
+    pane.scrollTop = zoomImage.offsetTop + clickFocus.y * rect.height - pane.clientHeight / 2;
   });
 }
 
@@ -335,7 +467,7 @@ pane.addEventListener("pointerup", (event) => {
 pane.addEventListener("wheel", (event) => {
   if (!event.metaKey && !event.ctrlKey) return;
   event.preventDefault();
-  setZoom(zoom + (event.deltaY > 0 ? -0.15 : 0.15));
+  setZoom(zoom + (event.deltaY > 0 ? -0.15 : 0.15), true, event);
 }, { passive: false });
 
 window.addEventListener("keydown", (event) => {
@@ -350,6 +482,101 @@ window.addEventListener("scroll", () => {
 
 scrollTop.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+function clearSearch() {
+  searchableCards.forEach((card) => {
+    card.classList.remove("is-search-match", "is-search-hidden");
+  });
+  chapterGroups.forEach((group) => {
+    group.divider.classList.remove("is-search-hidden");
+    group.labels.forEach((label) => label.classList.remove("is-search-hidden"));
+  });
+  searchResults.classList.remove("is-visible");
+  searchResults.innerHTML = "";
+  searchStatus.textContent = "Search notes and page labels";
+}
+
+function renderSearchResults(matches, query, terms) {
+  searchResults.innerHTML = "";
+
+  matches.slice(0, 8).forEach((card) => {
+    const button = card.querySelector(".page-button");
+    const title = button.dataset.label;
+    const section = card.dataset.section || button.dataset.kind;
+    const result = document.createElement("button");
+    const heading = document.createElement("strong");
+    const snippet = document.createElement("span");
+
+    result.type = "button";
+    result.className = "result-card";
+    heading.textContent = `${title} · ${section}`;
+    snippet.innerHTML = getCardSnippet(card, query, terms) || getSnippet(card.dataset.searchText, query, terms);
+
+    result.append(heading, snippet);
+    result.addEventListener("click", () => {
+      searchResults.classList.remove("is-visible");
+      searchStatus.textContent = `Showing ${title}`;
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    searchResults.append(result);
+  });
+
+  searchResults.classList.toggle("is-visible", matches.length > 0);
+}
+
+function applySearch() {
+  const query = searchInput.value.trim().toLowerCase();
+
+  if (!query) {
+    clearSearch();
+    return;
+  }
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  let matchCount = 0;
+  let firstMatch = null;
+  const matches = [];
+
+  chapterGroups.forEach((group) => {
+    let groupHasMatch = terms.every((term) => group.searchText.includes(term));
+
+    group.cards.forEach((card) => {
+      const isMatch = terms.every((term) => card.dataset.searchText.includes(term));
+      const score = isMatch ? getSearchScore(card.dataset.searchText, query, terms) : 0;
+      card.classList.toggle("is-search-match", isMatch);
+      card.classList.toggle("is-search-hidden", !isMatch && !groupHasMatch);
+
+      if (isMatch) {
+        matchCount += 1;
+        matches.push({ card, score });
+        groupHasMatch = true;
+      }
+    });
+
+    group.divider.classList.toggle("is-search-hidden", !groupHasMatch);
+    group.labels.forEach((label) => label.classList.toggle("is-search-hidden", !groupHasMatch));
+  });
+
+  if (matchCount === 0) {
+    searchStatus.textContent = "No matches";
+    searchResults.classList.remove("is-visible");
+    searchResults.innerHTML = "";
+    return;
+  }
+
+  searchStatus.textContent = `${matchCount} match${matchCount === 1 ? "" : "es"}`;
+  matches.sort((a, b) => b.score - a.score);
+  firstMatch = matches[0]?.card || null;
+  renderSearchResults(matches.map((match) => match.card), query, terms);
+  if (firstMatch) {
+    firstMatch.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+searchInput.addEventListener("input", () => {
+  window.clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(applySearch, 140);
 });
 
 buildChapterNav();
