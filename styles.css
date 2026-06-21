@@ -379,7 +379,8 @@ main {
 }
 
 .zoom-toolbar button,
-#zoomLabel {
+#zoomLabel,
+.zoom-nav {
   border-color: rgba(255, 255, 255, 0.22);
   color: #f8f7f1;
   background: rgba(255, 255, 255, 0.12);
@@ -395,6 +396,33 @@ main {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 8px;
   font-weight: 800;
+}
+
+.zoom-nav {
+  position: fixed;
+  top: 50%;
+  z-index: 22;
+  width: 52px;
+  height: 64px;
+  min-width: 52px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 2rem;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.zoom-nav-prev {
+  left: clamp(10px, 2vw, 28px);
+}
+
+.zoom-nav-next {
+  right: clamp(10px, 2vw, 28px);
+}
+
+.zoom-nav:disabled {
+  opacity: 0.28;
+  cursor: default;
 }
 
 .zoom-pane {
@@ -510,6 +538,16 @@ body.zooming {
   .zoom-toolbar {
     justify-content: flex-start;
     overflow-x: auto;
+  }
+
+  .zoom-nav {
+    top: auto;
+    bottom: 18px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    font-size: 1.6rem;
+    transform: none;
   }
 
   .zoom-pane {

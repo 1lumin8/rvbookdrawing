@@ -28,8 +28,11 @@ const closeZoom = document.querySelector("#closeZoom");
 const zoomIn = document.querySelector("#zoomIn");
 const zoomOut = document.querySelector("#zoomOut");
 const fitPage = document.querySelector("#fitPage");
+const prevPage = document.querySelector("#prevPage");
+const nextPage = document.querySelector("#nextPage");
 
 let activePage = null;
+let activeButton = null;
 let clickFocus = { x: 0.5, y: 0.5 };
 let zoom = 1;
 let fitWidth = 900;
@@ -374,6 +377,21 @@ function centerOnFocus() {
   });
 }
 
+function getPageButtons() {
+  return Array.from(grid.querySelectorAll(".page-button"));
+}
+
+function getActiveButtonIndex() {
+  return getPageButtons().indexOf(activeButton);
+}
+
+function updateZoomNav() {
+  const index = getActiveButtonIndex();
+  const buttons = getPageButtons();
+  prevPage.disabled = index <= 0;
+  nextPage.disabled = index < 0 || index >= buttons.length - 1;
+}
+
 function openZoom(button, event) {
   const page = button.dataset.page;
   const source = button.querySelector("img");
@@ -381,11 +399,12 @@ function openZoom(button, event) {
   const src = button.dataset.src;
   const label = source.alt || button.dataset.label || `Page ${page}`;
 
-  clickFocus = {
+  clickFocus = event ? {
     x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
     y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
-  };
+  } : { x: 0.5, y: 0.5 };
   activePage = page;
+  activeButton = button;
   zoomImage.src = src;
   zoomImage.alt = label;
 
@@ -403,6 +422,8 @@ function openZoom(button, event) {
   } else {
     zoomImage.addEventListener("load", centerOnFocus, { once: true });
   }
+
+  updateZoomNav();
 }
 
 function closeOverlay() {
@@ -410,6 +431,17 @@ function closeOverlay() {
   overlay.setAttribute("aria-hidden", "true");
   document.body.classList.remove("zooming");
   activePage = null;
+  activeButton = null;
+}
+
+function navigateZoom(direction) {
+  if (!activePage) return;
+  const buttons = getPageButtons();
+  const currentIndex = getActiveButtonIndex();
+  const nextIndex = currentIndex + direction;
+  const nextButton = buttons[nextIndex];
+  if (!nextButton) return;
+  openZoom(nextButton);
 }
 
 grid.addEventListener("click", (event) => {
@@ -430,6 +462,8 @@ fitPage.addEventListener("click", () => {
 });
 zoomIn.addEventListener("click", () => setZoom(zoom + 0.25));
 zoomOut.addEventListener("click", () => setZoom(zoom - 0.25));
+prevPage.addEventListener("click", () => navigateZoom(-1));
+nextPage.addEventListener("click", () => navigateZoom(1));
 
 overlay.addEventListener("click", (event) => {
   if (event.target === overlay) closeOverlay();
@@ -474,6 +508,8 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && activePage) closeOverlay();
   if ((event.key === "+" || event.key === "=") && activePage) setZoom(zoom + 0.25);
   if (event.key === "-" && activePage) setZoom(zoom - 0.25);
+  if (event.key === "ArrowLeft" && activePage) navigateZoom(-1);
+  if (event.key === "ArrowRight" && activePage) navigateZoom(1);
 });
 
 window.addEventListener("scroll", () => {
