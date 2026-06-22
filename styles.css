@@ -340,7 +340,7 @@ main {
   display: block;
   width: 100%;
   aspect-ratio: 8.5 / 11;
-  object-fit: cover;
+  object-fit: contain;
   background: #f4f2ec;
 }
 
@@ -505,16 +505,25 @@ body.zooming {
     align-items: stretch;
     flex-direction: column;
     gap: 8px;
+    padding-block: 9px;
   }
 
   .search-box {
     align-items: stretch;
     flex-direction: column;
+    flex: none;
     gap: 6px;
+    max-width: none;
     width: 100%;
   }
 
+  .search-box input {
+    min-height: 46px;
+  }
+
   .search-status {
+    min-height: 0;
+    font-size: 0.76rem;
     white-space: normal;
   }
 
